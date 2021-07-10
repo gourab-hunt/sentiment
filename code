@@ -1,0 +1,173 @@
+import tweepy
+from textblob import TextBlob
+from wordcloud import WordCloud
+import pandas as pd
+import numpy as np
+import re
+import matplotlib.pyplot as plt
+plt.style.use('fivethirtyeight')
+
+#Data Loading
+from google.colab import files
+uploaded = files.upload()
+
+log = pd.read_csv("data.csv")
+
+
+twitterApiKey= log['twitterApiKey'][0]
+twitterApiSecret = log['twitterApiSecret'][0]
+twitterApiAccessToken = log['twitterApiAccessToken'][0]
+twitterApiAccessTokenSecret =log['twitterApiAccessTokenSecret'][0]
+
+#Authentication 
+authenticate = tweepy.OAuthHandler(twitterApiKey,twitterApiSecret)
+authenticate.set_access_token(twitterApiAccessToken,twitterApiAccessTokenSecret)
+api = tweepy.API(authenticate, wait_on_rate_limit = True)
+
+#Tweet Extraction
+posts = api.user_timeline(screen_name="BillGates", count=1000, lang="en", tweet_mode="extended")
+print("Showing 5 latest tweets: \n")
+i=1
+for tweet in posts[0:5]:
+  print(str(i)+') '+ tweet.full_text + '\n')
+  i=i+1
+  
+  
+#Creating Data frame with a column called tweet
+df = pd.DataFrame( [tweet.full_text for tweet in posts] , columns=['Tweets'])
+
+#showing 1st row of data
+df.head()
+
+#Clean the tweets
+def cleanTxt(text):
+  text = re.sub(r'@[A-Za-z0-9]+','',text) #removes @
+  text = re.sub(r'#','',text) #removes hashtag
+  text = re.sub(r':','',text)#removes colon
+  text = re.sub(r'amp','',text)#removes extra special chars
+  text = re.sub(r'RT[\s]+','',text)#removes RT retweet
+  text = re.sub(r'http\S+', '', text)#removes links
+  
+  return text
+
+
+df['Tweets']= df['Tweets'].apply(cleanTxt)
+
+df
+
+
+#Calculating polarity
+def getSubjectivity(text):
+  return TextBlob(text).sentiment.subjectivity
+
+def getPolarity(text):
+  return TextBlob(text).sentiment.polarity
+
+df['Subjectivity'] = df['Tweets'].apply(getSubjectivity)
+df['polarity'] = df['Tweets'].apply(getPolarity)
+
+df
+
+#Ceating wordcloud
+allWords = ' '.join([twts for twts in df['Tweets']] )
+wordCloud = WordCloud(width = 500, height=300, random_state = 21, max_font_size = 119).generate(allWords)
+
+plt.imshow(wordCloud, interpolation = "bilinear")
+plt.axis('off')
+plt.show()
+
+
+#Computing negetive , neutral , positive
+def getAnalysis(score):
+  if score > 0:
+    return 'Positive'
+  elif score ==0:
+    return 'Neutral'
+  else :
+    return 'Negetive'
+
+df['Analysis'] = df['polarity'].apply(getAnalysis)
+
+df
+
+
+#PRINTING POSITIVE TWEETS
+j=1
+sortedDF = df.sort_values(by=['polarity'])
+for i in range(0, sortedDF.shape[0]):
+  if (sortedDF['Analysis'][i] == 'Positive'):
+    print(str(j) + ') '+sortedDF['Tweets'][i])
+    print()
+    j=j+1
+    
+
+
+#Print Negetive
+j=1
+sortedDF = df.sort_values(by=['polarity'],ascending='False')
+for i in range(0, sortedDF.shape[0]):
+  if (sortedDF['Analysis'][i] == 'Negetive'):
+    print(str(j) + ') '+sortedDF['Tweets'][i])
+    print()
+    j=j+1
+    
+    
+#Plotting Polarity and subjectivity
+plt.figure(figsize=(8,6))
+for i in range(0, df.shape[0]):
+  plt.scatter(df['polarity'][i], df['Subjectivity'][i], color= 'Blue')
+
+
+plt.title('Sentiment Analysis')
+plt.xlabel('polarity')
+plt.ylabel('Subjectivity')
+plt.show()
+
+#Get % positive news
+ptweets = df[df.Analysis == 'Positive']
+ptweets =ptweets['Tweets']
+
+p=round( (ptweets.shape[0]/df.shape[0]) *100 , 1)
+print(p)
+
+
+
+ntweets = df[df.Analysis == 'Negetive']
+ntweets = ntweets['Tweets']
+
+r=round( (ntweets.shape[0]/df.shape[0] *100) , 1)
+print(r)
+
+
+
+#Show value counts
+#conclution
+
+print("\n")
+print("\n")
+if(p>r):
+  print("The account holder posts positive tweets most of the time( "+str(p) +  "%)so he has a positive attitude")
+elif(p==r):
+  print("The account holder posts nuetral tweets most of the time ")
+else:
+  print("The account holder posts negetive tweets most of the time( "+str(r) +  "%) so he has a negetive attitude")
+  
+
+
+df['Analysis'].value_counts()
+
+plt.title('Sentiment Analysis')
+plt.xlabel('Sentiment')
+plt.ylabel('Counts')
+df['Analysis'].value_counts().plot(kind='bar')
+print("\n\n")
+plt.show()
+
+df['Analysis'].value_counts()
+
+plt.title('Sentiment Analysis')
+plt.xlabel('Sentiment')
+plt.ylabel('Counts')
+df['Analysis'].value_counts().plot(kind='pie')
+print("\n\n")
+plt.show()
